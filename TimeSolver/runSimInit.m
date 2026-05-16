@@ -1,0 +1,56 @@
+function SimGeom = runSimInit(Geom,par,options)    
+    % GTlow = Geom(1).Tlow;
+    % GTup = Geom(1).Tup;
+
+    % [SimGeom.dmnr,SimGeom.dmnrT] = calculateDomainNormalization(Geom);    
+
+    for kk = 1:length(Geom)
+        [Geom(kk).G,Geom(kk).H] = calculateMatrixGHMultiBoundary(Geom(kk));
+        [Geom(kk).bndr_idx,~] = returnMultiDomainBndrIdx(Geom(kk));
+    end
+   
+    [SimGeom.G00plt,SimGeom.H00plt,SimGeom.U00plt,~,SimGeom.PlotGeom,SimGeom.Rngs] = returnExportMatrices(Geom, options, 0, 0, 0);
+
+    [SimGeom.C1idx,SimGeom.C2idx] = returnMatrixC1C2(Geom);
+    % [SimGeom.C1Tidx,SimGeom.C2Tidx] = returnMatrixC1TC2T(Geom(GTlow:GTup),GTlow);
+
+    [SimGeom.G,SimGeom.H] = returnMatrixGH(Geom);
+
+    [SimGeom.T,SimGeom.Qi,SimGeom.Ui] = returnInternalUiQiT(Geom,SimGeom);   
+    % [SimGeom.TT,SimGeom.QiT,SimGeom.UiT] = returnInternalUiQiTThermal(Geom(GTlow:GTup),SimGeom);
+
+    [SimGeom.G00,SimGeom.Gx0,SimGeom.Gy0,SimGeom.H00,SimGeom.Hx0,SimGeom.Hy0,SimGeom.U00,SimGeom.Ux0,SimGeom.Uy0,SimGeom.UxxUyy,SimGeom.Phi] = returnAlphaMatrices(Geom);
+    % [SimGeom.G00T,SimGeom.H00T,SimGeom.U00T,SimGeom.UxxUyyT] = returnAlphaMatricesThermal(Geom(GTlow:GTup), SimGeom.dmnrT);
+
+    % Update with thermal model each time step   
+    % TidxA = [];
+    % TidxT = [];
+
+    % Loffset = sum([Geom(1:GTlow-1).Ldmn]);
+    % Toffset = 0;
+    % for ii = GTlow:GTup
+    %     Lpart = Geom(ii).Ldmn;
+    %     Tpart = Geom(ii).LdmnT;
+    %     if Lpart > 0 && Tpart > 0           
+    %         % If boundary nodes are used for internal collacation points,
+    %         % they are placed after the shared internal points so Tpart is
+    %         % larger than Lpart in that case, but the Lpart length
+    %         % corresponds to the same points
+    %         TidxA(end+1:end+Lpart) = Loffset + 1 : Loffset + Lpart;
+    %         TidxT(end+1:end+Lpart) = Toffset + 1 : Toffset + Lpart;           
+    %     end     
+    %     Loffset = Loffset + Lpart;
+    %     Toffset = Toffset + Tpart;
+    % end
+
+    % SimGeom.TidxA = TidxA;
+    % SimGeom.TidxT = TidxT;
+    % SimGeom.TLT = par.T0*ones(sum([Geom(GTlow:GTup).LdmnT]),1);    
+
+    % Initialize material properties
+    [SimGeom.mu] = returnPropertiesMagnetics(Geom,SimGeom);
+    [SimGeom.sigmaA] = returnPropertiesSigma(Geom,SimGeom);
+    % [SimGeom.kappa, SimGeom.rho, SimGeom.Cp] = returnPropertiesThermal(Geom(GTlow:GTup),SimGeom);
+
+    [SimGeom.an, SimGeom.bn] = boundaryFourierInnit(par);
+end

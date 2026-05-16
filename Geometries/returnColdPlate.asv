@@ -1,0 +1,45 @@
+function Geom = returnColdPlate(options)
+    %--- Cold plate parameters
+    x0 = 0;
+    y0 = 0;
+    L = 200e-3;             % Length in [m]
+    H = 20e-3;              % Height in [m]
+    Npipe = 4;              % Number of pipes
+    
+    T1 = 300;
+    T2 = 200;
+    %--- Properties
+    a = 1;
+    %------------ Domain properties ------------
+    Geom(1).a = a; Geom(1).source = 0;   % Domain property
+    %------------ Boundaries ------------
+
+    %--- Outer Boundary ---
+    p.x0 = x0;
+    p.x1 = x0+L;
+    p.y0 = y0;
+    p.y1 = y0+H;
+    bndr.idx = [1,1,1,1]; % idx = 1 is u bndr, idx = 0 is un bndr
+    bndr.val = [T1,T2,T2,T2];
+    p.domain_idx = [0,0,0,0]; 
+    p.boundary_idx = [0,0,0,0];
+    p.element_idx = [0,0,0,0];
+    [Geom(1).boundary(1)] = createSquareBoundary(p,bndr,options,0);
+
+    %--- Cooling pipes --- 
+    for nn = 1:Npipe
+        p.x0 = x0+L/2;    
+        p.y0 = y0+H/2; 
+        p.r = 5e-3;
+        bndr.idx = [1]; % idx = 1 is u bndr, idx = 0 is un bndr    
+        bndr.val = [0];
+        p.domain_idx = [0]; %[0,2,3,0];
+        p.boundary_idx = [0];
+        p.element_idx = [0];
+        [Geom(1).boundary(2)] = createCircleBoundary(p,bndr,options,1);  
+    
+
+
+
+    end
+end

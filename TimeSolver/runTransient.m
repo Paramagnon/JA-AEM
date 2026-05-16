@@ -1,0 +1,136 @@
+function [SimGeom] = runTransient(Geom, SimGeom, options, source)
+    %--------------- Thermal Geom ------------------
+    % GTlow = Geom(1).Tlow;
+    % GTup = Geom(1).Tup;
+    % rngT = SimGeom.Rngs.Nrng;
+    %---------------- Initialize -------------------
+    [SimGeom.SCidx, SimGeom.SC_tape] = returnVectorSCidx(Geom);
+    % --- Magnetics
+    [c1,c2,SimGeom.C3] = returnVectorc1c2c3(Geom);    
+    SimGeom.C1 = SimGeom.C1idx.*c1'; 
+    SimGeom.C2 = SimGeom.C2idx.*c2';
+    [SimGeom.Z,SimGeom.e] = returnMatrixZe(SimGeom);
+    [SimGeom.S00,SimGeom.Sx0,SimGeom.Sy0,SimGeom.z00,SimGeom.zx0,SimGeom.zy0] = returnSklzkl(SimGeom);
+    % --- Thermal
+    % [c1T,c2T,SimGeom.C3T] = returnVectorc1Tc2Tc3T(Geom(GTlow:GTup));
+    % SimGeom.C1T = SimGeom.C1Tidx.*c1T';
+    % SimGeom.C2T = SimGeom.C2Tidx.*c2T';
+    % [SimGeom.ZT,SimGeom.eT] = returnMatrixZeThermal(SimGeom);   
+    % [SimGeom.S00T,SimGeom.z00T] = returnSklzklThermal(SimGeom);   
+    
+    %---------------- Matrices ---------------------
+    SimGeom.invK = mldivide(([SimGeom.H, -SimGeom.G; SimGeom.C1, SimGeom.C2])*1e5,eye(2*size(SimGeom.C1)))*1e5;
+    % SimGeom.invKT = mldivide(([SimGeom.H(rngT,rngT), -SimGeom.G(rngT,rngT); SimGeom.C1T, SimGeom.C2T])*1e5,eye(2*size(SimGeom.C1T)))*1e5;
+
+    [SimGeom.JacobianInit, SimGeom.Nsc_tot, SimGeom.Nsc_tapes] = returnInitJacobian(Geom, SimGeom, options);
+    
+    t = 0:options.dt:options.tmax;
+    options.t = 0;
+
+    %---------------- Time step zero ---------------
+    % --- Magnetics
+    alpha_curr = zeros(length(SimGeom.S00),1);
+    SimGeom.f = zeros(size(alpha_curr));  
+    SimGeom.p = zeros(size(c1));
+    SimGeom.puN = zeros(size(c1));
+    SimGeom.puL = zeros(size(SimGeom.G00plt,1),1);
+    SimGeom.pqN = zeros(size(c1));
+    if ~options.Tupdate
+        %---------------- Matrices ---------------------
+        dtU = options.dt*SimGeom.UxxUyy;
+        C0 = SimGeom.mu.*SimGeom.sigmaA;
+        CS = C0.*SimGeom.S00;
+        if options.Euler
+            % Backward Euler:
+            SimGeom.invdtUCS = mldivide((dtU - CS)*1e6,eye(size(dtU)))*1e6;
+        else
+            % Crank–Nicolson:
+            SimGeom.invdtUCS = mldivide((dtU - 2*CS)*1e6,eye(size(dtU)))*1e6;
+        end
+    end
+    % --- Thermal
+    % alphaT_curr = SimGeom.S00T\(SimGeom.TLT-SimGeom.z00T); % --> Fix initial conditions
+    % alphaT_curr = zeros(length(SimGeom.S00T),1);
+    % SimGeom.fT = zeros(length(SimGeom.S00T),1);
+    SimGeom.SimSol(1) = returnSimSol(SimGeom,alpha_curr,0,options);
+    %--- Remove after testing 
+    % figure(1)
+    % [options.plt] = plotContourfThermal(Geom(GTlow:GTup), SimGeom.PlotGeom(GTlow:GTup), SimGeom.SimSol(end), options, 1);
+    % colorMapThermal;
+    % colorbar;
+    % title(['Time: ' num2str(t(1)) ' s'])
+    % ylim([0.015 0.026])
+
+    if ~options.Tupdate
+        %---------------- Matrices ---------------------
+        dtU = options.dt*SimGeom.UxxUyyT;
+        C0 = (SimGeom.rho.*SimGeom.Cp./SimGeom.kappa);
+        CS = C0.*SimGeom.S00T;
+        if options.Euler
+            % Backward Euler:
+            SimGeom.invdtUCST = mldivide((dtU - CS)*1e6,eye(size(dtU)))*1e6;
+        else
+            % Crank–Nicolson:
+            SimGeom.invdtUCST = mldivide((dtU - 2*CS)*1e6,eye(size(dtU)))*1e6;
+        end
+    end
+
+    if options.debug
+        disp(['Timestep: ' num2str(1)])
+    end  
+    
+    %---------------- Time steps -------------------
+    for tt = 2:length(t)       
+        options.t = t(tt);        
+        alpha_prev = alpha_curr;
+        % alphaT_prev = alphaT_curr;
+
+        %--- Old current source, needed if no Fourier source is used
+        % SimGeom.f = -SimGeom.mu.*source(Geom,options,t(tt));   
+
+        %--- Update properties
+        % if options.Tupdate
+        %     [SimGeom.sigmaA] = returnPropertiesSigma(Geom,SimGeom);
+        %     [SimGeom.kappa, SimGeom.rho, SimGeom.Cp] = returnPropertiesThermal(Geom(GTlow:GTup),SimGeom);
+        % end
+
+        %---- Time stepping       
+        [alpha_curr,SimGeom,PQ] = runMagnetic(SimGeom, Geom, alpha_prev, options);
+
+        %-- Update fT and fT prev
+        % SimGeom.fT_prev = SimGeom.fT;
+        % sigmaj2 = -(((SimGeom.Phi*alpha_curr)./SimGeom.mu).^2)./SimGeom.sigmaA;
+        % SimGeom.fT(SimGeom.TidxT) = sigmaj2(SimGeom.TidxA)./SimGeom.kappa(SimGeom.TidxT);
+        % SimGeom.C3T_prev = SimGeom.C3T; 
+        % SimGeom.C3T = PQ(rngT);
+        % [alphaT_curr,SimGeom] = runThermal(SimGeom, alphaT_prev, options);
+
+        %---- Return solutions
+        SimGeom.SimSol(tt) = returnSimSol(SimGeom,alpha_curr,0,options);
+
+        %----- Remove after testing
+        % figure(1)
+        % [options.plt] = plotContourfThermal(Geom(GTlow:GTup), SimGeom.PlotGeom(GTlow:GTup), SimGeom.SimSol(end), options, 1);
+        % colorMapThermal;
+        % colorbar;
+        % title(['Time: ' num2str(t(tt)) ' s'])
+        % ylim([0.015 0.026])
+        % 
+        % figure(2)
+        % [options.plt] = plotContourf(Geom, SimGeom.PlotGeom, SimGeom.SimSol(end), options, 1);
+        % colorMapAltair;
+        % colorbar;
+        % title(['Time: ' num2str(t(tt)) ' s'])
+        % ylim([0 0.026])
+        %-----
+        % pause(0.1);
+        if options.debug
+            disp(['Timestep: ' num2str(tt)])
+        end
+    end
+
+    %---------------- GIF output -------------------
+    if options.runGIF
+        plotGIF(Geom, SimGeom, options);   
+    end
+end

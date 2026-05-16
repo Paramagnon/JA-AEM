@@ -1,0 +1,16 @@
+*.log
+*.aux
+*.out
+*.synctex.gz
+*.toc
+*.fdb_latexmk
+*.fls
+main.pdf
+*.png
+*.eps
+*.gif
+*.asv
+*.ppt
+*.mph
+*.pptx
+*.mat
